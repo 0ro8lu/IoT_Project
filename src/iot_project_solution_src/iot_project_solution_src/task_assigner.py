@@ -11,6 +11,10 @@ from rclpy.action import ActionClient
 from rosgraph_msgs.msg import Clock
 from iot_project_interfaces.srv import TaskAssignment
 from iot_project_solution_interfaces.action import PatrollingAction
+from geometry_msgs.msg import Point
+
+from sklearn.cluster import KMeans
+import numpy as np
 
 class TaskAssigner(Node):
 
@@ -26,9 +30,9 @@ class TaskAssigner(Node):
         self.action_servers = []
         self.current_tasks =  []
         self.idle = []
+        self.cluster_points = None
 
         self.sim_time = 0
-
 
         self.task_announcer = self.create_client(
             TaskAssignment,
@@ -86,6 +90,8 @@ class TaskAssigner(Node):
                 )
             )
 
+        self.define_clusters()
+
 
     # This method starts on a separate thread an ever-going patrolling task, it does that
     # by checking the idle state value of every drone and submitting a new goal as soon as
@@ -95,9 +101,9 @@ class TaskAssigner(Node):
         def keep_patrolling_inner():
             while True:
                 for d in range(self.no_drones):
-                    if self.idle[d]:
-
-                        Thread(target=self.submit_task, args=(d,)).start()
+                    if self.idle[d] and self.cluster_points is not None: # Wait that the cluster has been computed
+                        
+                        Thread(target=self.submit_task, args=(d, self.cluster_points[d])).start()
 
                 time.sleep(0.1)
 
@@ -168,6 +174,24 @@ class TaskAssigner(Node):
         self.clock = msg.clock.sec * 10**9 + msg.clock.nanosec
 
 
+    def define_clusters(self):
+
+        points = []
+        for target in self.targets: # Create a matrix that can be used by K-means
+            points.append([target.x, target.y, target.z])
+
+        n_clusters = self.no_drones # The number of clusters will be equal to the number of drones
+
+        kmeans = KMeans(n_clusters=n_clusters) # Creating the KMeans object with specified number of clusters
+        kmeans.fit(points) # Ecxecuting kmeans on all points
+        tmp_list = [[] for _ in enumerate(kmeans.labels_)]
+        self.cluster_points = {} # Making an empty list for points given to every cluster.
+
+        for i, label in enumerate(kmeans.labels_): # Assigning every point to the corresponding cluster
+            tmp_list[label].append(Point(x=points[i][0], y=points[i][1], z=points[i][2]))
+
+        for i, label in enumerate(kmeans.labels_):
+            self.cluster_points[i] = tmp_list[label]
         
 def main():
 
