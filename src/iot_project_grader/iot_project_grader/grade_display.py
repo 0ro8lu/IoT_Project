@@ -199,6 +199,7 @@ class GradeDisplay(Node):
                 self.aoi_y_values[t].append(aoi_value_y)
                 
 
+                # TIME LEFT!.
                 dpg.set_value(self.target_tags[t], value=target_time_left)
                 dpg.configure_item(self.target_tags[t], max_value=self.expiration_times[t])
                 dpg.configure_item(self.aoi_tags[t], x=self.aoi_x_values[t], y=self.aoi_y_values[t])

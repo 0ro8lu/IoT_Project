@@ -1,5 +1,6 @@
 import time
 import random
+import math
 
 from threading import Thread
 
@@ -12,6 +13,7 @@ from rosgraph_msgs.msg import Clock
 from iot_project_interfaces.srv import TaskAssignment
 from iot_project_solution_interfaces.action import PatrollingAction
 from geometry_msgs.msg import Point
+from nav_msgs.msg import Odometry
 
 from sklearn.cluster import KMeans
 import numpy as np
@@ -27,10 +29,14 @@ class TaskAssigner(Node):
         self.targets = []
         self.thresholds = []
 
+
         self.action_servers = []
         self.current_tasks =  []
         self.idle = []
-        self.cluster_points = None
+
+        self.drone_assigned_points = None
+        self.drone_position_topics = []
+        self.drone_positions = None
 
         self.sim_time = 0
 
@@ -80,6 +86,8 @@ class TaskAssigner(Node):
         self.current_tasks = [None]*self.no_drones
         self.idle = [True] * self.no_drones
 
+        self.drone_positions = [[] for _ in range(self.no_drones)]
+
         # Now create a client for the action server of each drone
         for d in range(self.no_drones):
             self.action_servers.append(
@@ -90,7 +98,30 @@ class TaskAssigner(Node):
                 )
             )
 
-        self.define_clusters()
+        # Now create a subscriber to the odometry topic for each drone in order to retrieve the current position
+        for d in range(self.no_drones):
+            self.drone_position_topics.append(
+                self.create_subscription(
+                Odometry,
+                "/X3_{0}/odometry".format(d),
+
+                lambda msg, d=d: self.odometry_callback(msg, d),
+                10
+                )
+            )
+
+        while self.drone_positions[0] == []:
+            continue
+
+        # Sort target based on their thresholds
+        merged_list = list(zip(self.targets, self.thresholds))
+        sorted_list = sorted(merged_list, key=lambda x: x[1])
+        self.targets, self.thresholds = zip(*sorted_list)
+
+        if self.no_drones > len(self.targets):
+            self.drone_assigned_points = self.assign_drone_to_target(self.targets)
+        else:
+            self.define_clusters()
 
 
     # This method starts on a separate thread an ever-going patrolling task, it does that
@@ -101,9 +132,9 @@ class TaskAssigner(Node):
         def keep_patrolling_inner():
             while True:
                 for d in range(self.no_drones):
-                    if self.idle[d] and self.cluster_points is not None: # Wait that the cluster has been computed
-                        
-                        Thread(target=self.submit_task, args=(d, self.cluster_points[d])).start()
+                    if self.idle[d] and self.drone_assigned_points is not None: # Wait that the cluster has been computed
+                    
+                        Thread(target=self.submit_task, args=(d, self.drone_assigned_points[d])).start()
 
                 time.sleep(0.1)
 
@@ -132,9 +163,9 @@ class TaskAssigner(Node):
 
         self.idle[drone_id] = False
 
-        if not targets_to_patrol:
-            targets_to_patrol = self.targets.copy()
-            random.shuffle(targets_to_patrol)
+        #if not targets_to_patrol:
+        #    targets_to_patrol = self.targets.copy()
+        #    random.shuffle(targets_to_patrol)
 
         patrol_task =  PatrollingAction.Goal()
         patrol_task.targets = targets_to_patrol
@@ -174,6 +205,7 @@ class TaskAssigner(Node):
         self.clock = msg.clock.sec * 10**9 + msg.clock.nanosec
 
 
+    # Function used to calculate the target clusters
     def define_clusters(self):
 
         points = []
@@ -184,15 +216,73 @@ class TaskAssigner(Node):
 
         kmeans = KMeans(n_clusters=n_clusters) # Creating the KMeans object with specified number of clusters
         kmeans.fit(points) # Ecxecuting kmeans on all points
-        tmp_list = [[] for _ in enumerate(kmeans.labels_)]
-        self.cluster_points = {} # Making an empty list for points given to every cluster.
+        tmp_list = [[] for _ in enumerate(kmeans.labels_)] # Making an empty list for points given to every cluster.
 
         for i, label in enumerate(kmeans.labels_): # Assigning every point to the corresponding cluster
             tmp_list[label].append(Point(x=points[i][0], y=points[i][1], z=points[i][2]))
 
-        for i, label in enumerate(kmeans.labels_):
-            self.cluster_points[i] = tmp_list[label]
+        centroids = [Point(x=center[0], y=center[1], z=center[2]) for center in kmeans.cluster_centers_] # Obtain the centroid lists
         
+        # Obtain the list with (centroid, list of points of the cluster)
+        points_by_centroid = [[] for _ in range(n_clusters)]  # Initialize the list
+        for i, centroid in enumerate(centroids): # For each cluster and each centroid
+            centroid_point = centroid
+            cluster_points = tmp_list[i]
+            points_by_centroid[i] = (centroid_point, cluster_points) # Assign the centroid and its cluster
+
+        self.drone_assigned_points = [[] for _ in range(self.no_drones)] # Initialize the list
+
+        centroid_drone_list = self.assign_drone_to_target(centroids) # Obtain the list which associates each drone to a centroid
+        for drone_id in range(self.no_drones):
+
+            assigned_centroid = centroid_drone_list[drone_id][0] # Obtain the centroid assinged to the drone
+            for x in points_by_centroid: # Loop on the list to find the list of points associated to the centroid
+                if x[0] == assigned_centroid: # We have found the assigned centroid inside the list
+                    assigned_cluster = x[1] # Save the list of points associated to that centroid (cluster)
+                    break
+            self.drone_assigned_points[drone_id] = assigned_cluster # Save the list of points into the final list
+
+        #Sort the points in each cluster based on the initial threshold
+        for drone_id in range(self.no_drones):
+            self.drone_assigned_points[drone_id].sort(key=lambda x: self.targets.index(x))
+
+    # Function used to assign a drone to the nearest target
+    def assign_drone_to_target(self, target_list):
+
+        not_assigned_drones = [x for x in range(self.no_drones)] # List of the drones that are without an assigned cluster
+        target_drone_list = [[] for _ in range(self.no_drones)]
+
+        # Assign the drone to the nearest target
+        for target in target_list:
+
+            min_dist = None
+            for drone in not_assigned_drones: # For every drone find the distance between it and the closest centroid
+                current_dist = self.euclidean_distance_3d(target, self.drone_positions[drone][0]) # Function to calculate eucledian distance in 3D space
+
+                if min_dist is None: # If we are at the beginning of the search
+                    min_dist = current_dist # Update minimum distance
+                    selected_drone = drone # Update selected drone
+
+                elif min_dist > current_dist: # If the current drone is nearest to the centroid
+                    min_dist = current_dist # Update the minimum distance
+                    selected_drone = drone # Update the drone
+            
+            target_drone_list[selected_drone] = [target] # The cluster is a single point (the nearest tharget)
+            not_assigned_drones.remove(selected_drone) # Remove the drone from the list since now it has an assigned target
+
+        return target_drone_list
+
+    # Function used to calcuate the eculidian distance between 2 points in a 3D space
+    def euclidean_distance_3d(self, point1, point2):
+        x1, y1, z1 = point1.x, point1.y, point1.z
+        x2, y2, z2 = point2.x, point2.y, point2.z
+        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+
+    # Callback function used to obtain the drone real time position, each element in the list is a list [position, orientation]
+    def odometry_callback(self, msg:Odometry, drone_id):
+
+        self.drone_positions[drone_id] = [msg.pose.pose.position, msg.pose.pose.orientation]
+
 def main():
 
     time.sleep(3.0)
