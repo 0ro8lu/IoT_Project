@@ -119,8 +119,8 @@ class DroneController(Node):
         stop_mov.angular = Vector3(x=0.0, y=0.0, z=0.0)
         self.cmd_vel_topic.publish(stop_mov)
 
-
-    def rotate_to_target(self, target : Point, eps = 0.1):
+    # Edited the eps
+    def rotate_to_target(self, target : Point, eps = 0.35):
 
         target = (target.x, target.y, target.z)
 
@@ -134,12 +134,13 @@ class DroneController(Node):
         # We verify the optimal direction of the rotation here
         rotation_dir = -1
         if angle_to_rotate < 0 or angle_to_rotate > math.pi:
+            self.get_logger().info("PRINTING ANGLE TO ROTATE: {0}".format(angle_to_rotate))
             rotation_dir = 1
         
         # Prepare the cmd_vel message
         move_msg = Twist()
         move_msg.linear = Vector3(x=0.0, y=0.0, z=0.0)
-        move_msg.angular = Vector3(x=0.0, y=0.0, z = 0.5 * rotation_dir)
+        move_msg.angular = Vector3(x=0.0, y=0.0, z = 1.0 * rotation_dir) # Edited the angular velocity
 
 
         # Publish the message until the correct rotation is reached (accounting for some eps error)
@@ -180,7 +181,7 @@ class DroneController(Node):
 
             if not (angle-angle_eps < current_angle < angle+angle_eps):
                 angle_diff = (current_angle-angle)
-                mov.angular = Vector3(x=0.0, y=0.0, z=math.sin(angle_diff))
+                mov.angular = Vector3(x=0.0, y=0.0, z=angle_diff) # Edited the angular velocity
 
             self.cmd_vel_topic.publish(mov)
 

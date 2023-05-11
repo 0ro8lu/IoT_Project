@@ -1,11 +1,11 @@
 # simulation name can be defined like this
-simulation_name:
+simulation_name:Unfair Simulation
 
 # specifies the number of drones in the simulation
 no_drones:2
 
 # specifies simulation time in seconds
-simulation_time:600
+simulation_time:300
 
 # specifies targets positions
 target_positions:(0,0,30);(10,10,5);(10,9,6);(9,8,5);(-10,-8,7);(-9,-10,8);(-10,-10,6)

@@ -12,6 +12,7 @@ from rclpy.action import ActionClient
 from rosgraph_msgs.msg import Clock
 from iot_project_interfaces.srv import TaskAssignment
 from iot_project_solution_interfaces.action import PatrollingAction
+from iot_project_interfaces.msg import TargetsTimeLeft
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 
@@ -35,8 +36,9 @@ class TaskAssigner(Node):
         self.idle = []
 
         self.drone_assigned_points = None
-        self.drone_position_topics = []
+        self.current_thresholds = []
         self.drone_positions = None
+        self.drone_first_assignment = None
 
         self.sim_time = 0
 
@@ -52,6 +54,8 @@ class TaskAssigner(Node):
             10
         )
 
+
+
     # Function used to wait for the current task. After receiving the task, it submits
     # to all the drone topics
     def get_task_and_subscribe_to_drones(self):
@@ -65,6 +69,7 @@ class TaskAssigner(Node):
 
         assignment_future = self.task_announcer.call_async(TaskAssignment.Request())
         assignment_future.add_done_callback(self.first_assignment_callback)
+
 
 
     # Callback used for when the patrolling task has been assigned for the first time.
@@ -82,11 +87,15 @@ class TaskAssigner(Node):
         self.no_drones = task.no_drones
         self.targets = task.target_positions
         self.thresholds = task.target_thresholds
+        self.aoi = task.aoi_weight
+        self.fairness = task.fairness_weight
+        self.violation = task.violation_weight
 
         self.current_tasks = [None]*self.no_drones
         self.idle = [True] * self.no_drones
 
         self.drone_positions = [[] for _ in range(self.no_drones)]
+        self.drone_first_assignment = [False for _ in range(self.no_drones)]
 
         # Now create a client for the action server of each drone
         for d in range(self.no_drones):
@@ -100,15 +109,13 @@ class TaskAssigner(Node):
 
         # Now create a subscriber to the odometry topic for each drone in order to retrieve the current position
         for d in range(self.no_drones):
-            self.drone_position_topics.append(
-                self.create_subscription(
-                Odometry,
-                "/X3_{0}/odometry".format(d),
+            self.create_subscription(
+            Odometry,
+            "/X3_{0}/odometry".format(d),
+            lambda msg, d=d: self.odometry_callback(msg, d),
+            10)
 
-                lambda msg, d=d: self.odometry_callback(msg, d),
-                10
-                )
-            )
+        self.update_thresholds = self.create_subscription(TargetsTimeLeft, "/task_assigner/targets_time_left", self.thresholds_callback, 10)
 
         while self.drone_positions[0] == []:
             continue
@@ -116,12 +123,13 @@ class TaskAssigner(Node):
         # Sort target based on their thresholds
         merged_list = list(zip(self.targets, self.thresholds))
         sorted_list = sorted(merged_list, key=lambda x: x[1])
-        self.targets, self.thresholds = zip(*sorted_list)
+        sorted_targets, sorted_thresholds = zip(*sorted_list)
 
         if self.no_drones > len(self.targets):
-            self.drone_assigned_points = self.assign_drone_to_target(self.targets)
+            self.drone_assigned_points = self.assign_drone_to_target(sorted_targets)
         else:
             self.define_clusters()
+
 
 
     # This method starts on a separate thread an ever-going patrolling task, it does that
@@ -129,18 +137,51 @@ class TaskAssigner(Node):
     # that value goes back to True
     def keep_patrolling(self):
 
-        def keep_patrolling_inner():
+        #Function used to perform a fair patrolling. Each drone will loop on its cluster.
+        def fair_patrolling():
             while True:
-                for d in range(self.no_drones):
-                    if self.idle[d] and self.drone_assigned_points is not None: # Wait that the cluster has been computed
-                    
-                        Thread(target=self.submit_task, args=(d, self.drone_assigned_points[d])).start()
+                for drone_id in range(self.no_drones):
+                    if self.idle[drone_id] and self.drone_assigned_points is not None: # Wait that the cluster has been computed
+                        Thread(target=self.submit_task, args=(drone_id, self.drone_assigned_points[drone_id])).start()
+                        
 
                 time.sleep(0.1)
 
-        Thread(target=keep_patrolling_inner).start()
+        # Function used to perform an unfair patrolling. Each drone when idle will check for the target (inside its cluster) with the lowest 
+        # current threashold. The drone will move only when the time to reach the next point is close to the threshold of that point 
+        def unfair_patrolling():
+                        
+            while True:
+                for drone_id in range(self.no_drones):
+                    if self.idle[drone_id] and self.drone_assigned_points is not None:
+
+                        if self.drone_first_assignment[drone_id] == False: # The drone has been never assigned to a target
+                            Thread(target=self.submit_task, args=(drone_id, [self.drone_assigned_points[drone_id][0]])).start() # Assign the drone to the first target of the cluster
+                            self.drone_first_assignment[drone_id] = True
+                        
+                        else:
+                            drone_cluster_thresholds = []
+                            for i in range(len(self.drone_assigned_points[drone_id])): # Obtain the current threashold of each target
+                                target_index = self.targets.index(self.drone_assigned_points[drone_id][i])
+                                drone_cluster_thresholds.append(self.current_thresholds[target_index]) # Append the current threshold of the target i
+                        
+                            
+                            min_target_index = drone_cluster_thresholds.index(min(drone_cluster_thresholds)) # Index of the target with the lowest current threshold in the cluster
+                            distance = self.euclidean_distance_3d(self.drone_positions[drone_id][0], self.drone_assigned_points[drone_id][min_target_index]) # Get the distance between the drone and the target
+
+                            if (drone_cluster_thresholds[min_target_index] / 10**9) - 4 <= distance:
+                                assigned_target = [self.drone_assigned_points[drone_id][min_target_index]]
+                                Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Assign the drone to the target
+
+                time.sleep(0.1)
+
+        #if self.fairness >= 0.5:
+        #    Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
+        #else:
+        Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
 
     
+
     # Submits a patrol task to a single drone. Basic implementation just takes the array
     # of targets and shuffles it. Is up to you to improve this part and come up with your own
     # algorithm.
@@ -178,6 +219,7 @@ class TaskAssigner(Node):
         patrol_future.add_done_callback(lambda future, d = drone_id : self.patrol_submitted_callback(future, d))
 
 
+
     # Callback used to verify if the action has been accepted.
     # If it did, prepares a callback for when the action gets completed
     def patrol_submitted_callback(self, future, drone_id):
@@ -194,15 +236,18 @@ class TaskAssigner(Node):
         result_future.add_done_callback(lambda future, d = drone_id : self.patrol_completed_callback(future, d))
 
 
+
     # Callback used to update the idle state of the drone when the action ends
     def patrol_completed_callback(self, future, drone_id):
         self.get_logger().info("Patrolling action for drone X3_%s has been completed. Drone is going idle" % drone_id)
         self.idle[drone_id] = True
 
 
+
     # Callback used to store simulation time
     def store_sim_time_callback(self, msg):
         self.clock = msg.clock.sec * 10**9 + msg.clock.nanosec
+
 
 
     # Function used to calculate the target clusters
@@ -246,31 +291,34 @@ class TaskAssigner(Node):
         for drone_id in range(self.no_drones):
             self.drone_assigned_points[drone_id].sort(key=lambda x: self.targets.index(x))
 
+
+
     # Function used to assign a drone to the nearest target
     def assign_drone_to_target(self, target_list):
 
-        not_assigned_drones = [x for x in range(self.no_drones)] # List of the drones that are without an assigned cluster
+        not_assigned_targets = target_list.copy() # List of the drones that are without an assigned cluster
         target_drone_list = [[] for _ in range(self.no_drones)]
 
         # Assign the drone to the nearest target
-        for target in target_list:
-
+        for drone in range(self.no_drones):
             min_dist = None
-            for drone in not_assigned_drones: # For every drone find the distance between it and the closest centroid
+            for target in not_assigned_targets:
                 current_dist = self.euclidean_distance_3d(target, self.drone_positions[drone][0]) # Function to calculate eucledian distance in 3D space
 
                 if min_dist is None: # If we are at the beginning of the search
                     min_dist = current_dist # Update minimum distance
-                    selected_drone = drone # Update selected drone
+                    selected_target = target # Update selected target
 
                 elif min_dist > current_dist: # If the current drone is nearest to the centroid
                     min_dist = current_dist # Update the minimum distance
-                    selected_drone = drone # Update the drone
+                    selected_target = target # Update the target
             
-            target_drone_list[selected_drone] = [target] # The cluster is a single point (the nearest tharget)
-            not_assigned_drones.remove(selected_drone) # Remove the drone from the list since now it has an assigned target
+            target_drone_list[drone] = [selected_target] # The cluster is a single point (the nearest tharget)
+            not_assigned_targets.remove(selected_target) # Remove the target from the list since now it has an assigned target
 
         return target_drone_list
+
+
 
     # Function used to calcuate the eculidian distance between 2 points in a 3D space
     def euclidean_distance_3d(self, point1, point2):
@@ -278,10 +326,17 @@ class TaskAssigner(Node):
         x2, y2, z2 = point2.x, point2.y, point2.z
         return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
+
+
     # Callback function used to obtain the drone real time position, each element in the list is a list [position, orientation]
     def odometry_callback(self, msg:Odometry, drone_id):
 
         self.drone_positions[drone_id] = [msg.pose.pose.position, msg.pose.pose.orientation]
+
+
+    # Callback function used to obtain the current threasholds of the targets
+    def thresholds_callback(self, msg:TargetsTimeLeft):
+        self.current_thresholds = msg.times
 
 def main():
 

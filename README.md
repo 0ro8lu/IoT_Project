@@ -1,4 +1,4 @@
-# IoT-Project v1.1.0a
+# IoT-Project v1.1.2
 
 <p align="center">
   <img src="https://fede3751.github.io/IoT_lectures/imgs/project/project_splashart.png">
@@ -27,12 +27,17 @@ For each target, you can check at any given time its threshold time and its AoI 
 A good solution should be able to keep the Cumulative AoI and Violation as low as possible, while trying to keep the fairness as close as possible to a value of 1.<br><br>
 The importance of which value to prioritize should be decided based on the weights given for each of the three evaluation metrics.
 In the general case, with equal weights among the three metrics, you should always strive to have the least amount of violation, then to minimize the cumulative AoI, and only after that to have a fair solution.<br><br>
-The precise score which takes into account the three evaluation metrics will be added soon to the grader, and will be displayed in the grader application for you to have a single final value to optimize for each instance.
+
+The score is calculated as follows:
+
+<p align="center">
+  <img src="https://fede3751.github.io/IoT_lectures/imgs/project/score_calculation.png">
+</p>
 
 
 ## Launching the Simulation
 
-Just clone this repoistory:
+Just clone this repository:
 
 ```
 git clone https://github.com/Fede3751/IoT-Project.git
@@ -54,6 +59,12 @@ And then start the simulation
 
 ```
 ./start
+```
+
+If you want to load a custom simulation file, you can just add it to the arguments of the <code>start</code> executable:
+
+```
+./start ./sim_files/your_simulation.sim
 ```
 
 This executable will automatically compile your solution package, source the environment, and launch the simulation.<br><br>

@@ -1,11 +1,11 @@
 # simulation name can be defined like this
-simulation_name:Simple Simulation
+simulation_name:Windy Simulation
 
 # specifies the number of drones in the simulation
 no_drones:3
 
 # specifies simulation time in seconds
-simulation_time:600
+simulation_time:300
 
 # specifies targets positions
 target_positions:(-5,-5,3);(-5,2,7);(7,7,7);(3,-5,6);(5,5,7)
