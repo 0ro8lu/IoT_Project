@@ -39,6 +39,9 @@ class TaskAssigner(Node):
         self.current_thresholds = []
         self.drone_positions = None
         self.drone_first_assignment = None
+        self.aoi = None
+        self.fairness = None
+        self.violation = None
 
         self.sim_time = 0
 
@@ -128,7 +131,8 @@ class TaskAssigner(Node):
         if self.no_drones > len(self.targets):
             self.drone_assigned_points = self.assign_drone_to_target(sorted_targets)
         else:
-            self.define_clusters()
+             self.define_clusters()
+
 
 
 
@@ -171,14 +175,14 @@ class TaskAssigner(Node):
 
                             if (drone_cluster_thresholds[min_target_index] / 10**9) - 4 <= distance:
                                 assigned_target = [self.drone_assigned_points[drone_id][min_target_index]]
-                                Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Assign the drone to the target
+                                Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Move the drone
 
                 time.sleep(0.1)
 
-        #if self.fairness >= 0.5:
-        #    Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
-        #else:
-        Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
+        if self.fairness is not None and self.fairness >= 0.5:
+            Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
+        else:
+            Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
 
     
 
@@ -317,7 +321,6 @@ class TaskAssigner(Node):
             not_assigned_targets.remove(selected_target) # Remove the target from the list since now it has an assigned target
 
         return target_drone_list
-
 
 
     # Function used to calcuate the eculidian distance between 2 points in a 3D space
