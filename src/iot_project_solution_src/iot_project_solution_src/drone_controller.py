@@ -12,6 +12,8 @@ from iot_project_solution_interfaces.action import PatrollingAction
 
 from iot_project_solution_src.math_utils import *
 
+from tf_transformations import euler_from_quaternion
+
 # This variable is used for the drone to stay away from the ground
 # Now that our movement also makes the drone fly up if necessary, the
 # fly_to_altitude function should only be used to compensate if the drone is
@@ -120,7 +122,7 @@ class DroneController(Node):
         self.cmd_vel_topic.publish(stop_mov)
 
     # Edited the eps
-    def rotate_to_target(self, target : Point, eps = 0.35):
+    def rotate_to_target(self, target : Point, eps = 0.5):
 
         target = (target.x, target.y, target.z)
 
@@ -133,13 +135,13 @@ class DroneController(Node):
 
         # We verify the optimal direction of the rotation here
         rotation_dir = -1
-        if angle_to_rotate < 0 or angle_to_rotate > math.pi:
+        if (-math.pi < angle_to_rotate and angle_to_rotate < 0) or angle_to_rotate > math.pi:
             rotation_dir = 1
         
         # Prepare the cmd_vel message
         move_msg = Twist()
         move_msg.linear = Vector3(x=0.0, y=0.0, z=0.0)
-        move_msg.angular = Vector3(x=0.0, y=0.0, z = 1.0 * rotation_dir) # Edited the angular velocity
+        move_msg.angular = Vector3(x=0.0, y=0.0, z = 0.8 * rotation_dir) # Edited the angular velocity
 
 
         # Publish the message until the correct rotation is reached (accounting for some eps error)
@@ -172,8 +174,9 @@ class DroneController(Node):
             direction_vector = move_vector(current_position, objective_point)
 
             mov = Twist()
-            mov.linear = Vector3(x=direction_vector[0], y=0.0, z=direction_vector[1])
             mov.angular = Vector3(x=0.0, y=0.0, z=0.0)
+            mov.linear = Vector3(x=direction_vector[0], y=0.0, z=direction_vector[1])
+
 
             angle = angle_between_points(current_position, objective_point)
             current_angle = self.yaw
@@ -188,6 +191,13 @@ class DroneController(Node):
         stop_msg.linear = Vector3(x=0.0, y=0.0, z=0.0)
         stop_msg.angular = Vector3(x=0.0, y=0.0, z=0.0)
         self.cmd_vel_topic.publish(stop_msg)
+
+
+    # Function used to calcuate the eculidian distance between 2 points in a 3D space
+    def euclidean_distance_3d(self, point1, point2):
+        x1, y1, z1 = point1[0], point1[1], point1[2]
+        x2, y2, z2 = point2[0], point2[1], point2[2]
+        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
 
     def report_target_reached(self, goal_handle, target_count):

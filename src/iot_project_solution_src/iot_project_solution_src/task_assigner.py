@@ -1,3 +1,4 @@
+
 import time
 import random
 import math
@@ -18,6 +19,7 @@ from nav_msgs.msg import Odometry
 
 from sklearn.cluster import KMeans
 import numpy as np
+import statistics
 
 class TaskAssigner(Node):
 
@@ -173,11 +175,11 @@ class TaskAssigner(Node):
                             min_target_index = drone_cluster_thresholds.index(min(drone_cluster_thresholds)) # Index of the target with the lowest current threshold in the cluster
                             distance = self.euclidean_distance_3d(self.drone_positions[drone_id][0], self.drone_assigned_points[drone_id][min_target_index]) # Get the distance between the drone and the target
 
-                            if (drone_cluster_thresholds[min_target_index] / 10**9) - 4 <= distance:
+                            if (drone_cluster_thresholds[min_target_index] / 10**9) - 4.5 <= distance:
                                 assigned_target = [self.drone_assigned_points[drone_id][min_target_index]]
                                 Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Move the drone
 
-                time.sleep(0.1)
+                time.sleep(0.3)
 
         if self.fairness is not None and self.fairness >= 0.5:
             Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
@@ -279,6 +281,13 @@ class TaskAssigner(Node):
             cluster_points = tmp_list[i]
             points_by_centroid[i] = (centroid_point, cluster_points) # Assign the centroid and its cluster
 
+
+        #if self.fairness < 0.5:
+        #    for i in range(len(points_by_centroid)):
+        #        new_cluster = self.remove_outliers(points_by_centroid[i][1])
+        #        points_by_centroid[i] = (points_by_centroid[i][0], new_cluster)
+
+
         self.drone_assigned_points = [[] for _ in range(self.no_drones)] # Initialize the list
 
         centroid_drone_list = self.assign_drone_to_target(centroids) # Obtain the list which associates each drone to a centroid
@@ -322,6 +331,29 @@ class TaskAssigner(Node):
 
         return target_drone_list
 
+
+    def remove_outliers(self, cluster:list):
+        distances_avg = [0 for _ in range(len(cluster))]
+        for i in range(len(cluster)):
+            for j in range(len(cluster)):
+                if i != j:
+                    p1 = cluster[i]
+                    p2 = cluster[j]
+                    distances_avg[i] += self.euclidean_distance_3d(p1, p2)
+            
+            distances_avg[i] = distances_avg[i] / len(cluster) - 1
+            # calculate the standard deviation of distances_avg list
+        
+        dev_std = statistics.stdev(distances_avg)
+        for i in range(len(cluster.copy())):
+            
+            z_score = (distances_avg[i] - np.mean(distances_avg)) / dev_std
+            if z_score >= 1:
+                cluster.pop(i)
+
+        return cluster
+
+            
 
     # Function used to calcuate the eculidian distance between 2 points in a 3D space
     def euclidean_distance_3d(self, point1, point2):
