@@ -31,6 +31,7 @@ class TaskAssigner(Node):
         self.thresholds = []
 
 
+
         self.action_servers = []
         self.current_tasks =  []
         self.idle = []
@@ -39,6 +40,7 @@ class TaskAssigner(Node):
         self.current_thresholds = []
         self.drone_positions = None
         self.drone_first_assignment = None
+        self.last_target = [] ####### MARCO #######
         self.aoi = None
         self.fairness = None
         self.violation = None
@@ -99,6 +101,7 @@ class TaskAssigner(Node):
 
         self.drone_positions = [[] for _ in range(self.no_drones)]
         self.drone_first_assignment = [False for _ in range(self.no_drones)]
+        self.last_target = [None for _ in range(self.no_drones)] ####### MARCO ########
 
         # Now create a client for the action server of each drone
         for d in range(self.no_drones):
@@ -172,10 +175,24 @@ class TaskAssigner(Node):
                             
                             min_target_index = drone_cluster_thresholds.index(min(drone_cluster_thresholds)) # Index of the target with the lowest current threshold in the cluster
                             distance = self.euclidean_distance_3d(self.drone_positions[drone_id][0], self.drone_assigned_points[drone_id][min_target_index]) # Get the distance between the drone and the target
+                            if self.last_target[drone_id] is not None: ####### MARCO ########
+                                current_point_threshold = drone_cluster_thresholds[self.drone_assigned_points[drone_id].index(self.last_target[drone_id])] / 10**9 ####### MARCO #######
+                                next_point_threshold = self.thresholds[self.targets.index(drone_cluster_thresholds[min_target_index])] / 10**9 ####### MARCO #######
 
-                            if (drone_cluster_thresholds[min_target_index] / 10**9) - 4 <= distance:
-                                assigned_target = [self.drone_assigned_points[drone_id][min_target_index]]
-                                Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Move the drone
+                            if self.last_target[drone_id] is not None: ####### MARCO #######
+                                if (drone_cluster_thresholds[min_target_index] / 10**9) - 4 <= distance and distance*2 > current_point_threshold + next_point_threshold: ####### MARCO ########
+                                    assigned_target = [self.drone_assigned_points[drone_id][min_target_index]]
+                                    self.last_target[drone_id] = assigned_target[0]
+                                    print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") ####### MARCO #######
+                                    print(self.last_target) ####### MARCO ########
+                                    Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Move the drone
+                            else:
+                                if (drone_cluster_thresholds[min_target_index] / 10**9) - 4 <= distance:
+                                    assigned_target = [self.drone_assigned_points[drone_id][min_target_index]]
+                                    self.last_target[drone_id] = assigned_target[0]
+                                    print(self.last_target) ####### MARCO #######
+                                    Thread(target=self.submit_task, args=(drone_id, assigned_target)).start() # Move the drone            
+
 
                 time.sleep(0.1)
 
