@@ -1,4 +1,4 @@
-
+ 
 import time
 import random
 import math
@@ -44,6 +44,7 @@ class TaskAssigner(Node):
         self.aoi = None
         self.fairness = None
         self.violation = None
+        self.drone_outliers = None
 
         self.sim_time = 0
 
@@ -156,16 +157,32 @@ class TaskAssigner(Node):
         # Function used to perform an unfair patrolling. Each drone when idle will check for the target (inside its cluster) with the lowest 
         # current threashold. The drone will move only when the time to reach the next point is close to the threshold of that point 
         def unfair_patrolling():
-                        
+
+            while self.no_drones == 0:
+                continue
+            
+            drone_flag_outlier = [False for _ in range(self.no_drones)]
+
             while True:
                 for drone_id in range(self.no_drones):
+
+                    if (self.sim_time // 10**9) % 100 == 0 and (self.sim_time // 10**9) > 0:
+                        drone_flag_outlier[drone_id] = True
+
                     if self.idle[drone_id] and self.drone_assigned_points is not None:
 
                         if self.drone_first_assignment[drone_id] == False: # The drone has been never assigned to a target
                             Thread(target=self.submit_task, args=(drone_id, [self.drone_assigned_points[drone_id][0]])).start() # Assign the drone to the first target of the cluster
                             self.drone_first_assignment[drone_id] = True
+                            
                         
                         else:
+                        
+                            #if drone_flag_outlier[drone_id] == True and self.drone_outliers[drone_id] != []: # The drone has been assigned to an outlier
+                            #    Thread(target=self.submit_task, args=(drone_id, self.drone_outliers[drone_id])).start() # Move the drone
+                            #    drone_flag_outlier[drone_id] = False
+                            #    continue
+
                             drone_cluster_thresholds = []
                             for i in range(len(self.drone_assigned_points[drone_id])): # Obtain the current threashold of each target
                                 target_index = self.targets.index(self.drone_assigned_points[drone_id][i])
@@ -181,10 +198,10 @@ class TaskAssigner(Node):
 
                 time.sleep(0.3)
 
-        if self.fairness is not None and self.fairness >= 0.5:
-            Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
-        else:
-            Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
+        #if self.fairness is not None and self.fairness >= 0.5:
+        Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
+        #else:
+        #    Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
 
     
 
@@ -252,7 +269,7 @@ class TaskAssigner(Node):
 
     # Callback used to store simulation time
     def store_sim_time_callback(self, msg):
-        self.clock = msg.clock.sec * 10**9 + msg.clock.nanosec
+        self.sim_time = msg.clock.sec * 10**9 + msg.clock.nanosec
 
 
 
@@ -282,12 +299,6 @@ class TaskAssigner(Node):
             points_by_centroid[i] = (centroid_point, cluster_points) # Assign the centroid and its cluster
 
 
-        #if self.fairness < 0.5:
-        #    for i in range(len(points_by_centroid)):
-        #        new_cluster = self.remove_outliers(points_by_centroid[i][1])
-        #        points_by_centroid[i] = (points_by_centroid[i][0], new_cluster)
-
-
         self.drone_assigned_points = [[] for _ in range(self.no_drones)] # Initialize the list
 
         centroid_drone_list = self.assign_drone_to_target(centroids) # Obtain the list which associates each drone to a centroid
@@ -299,6 +310,12 @@ class TaskAssigner(Node):
                     assigned_cluster = x[1] # Save the list of points associated to that centroid (cluster)
                     break
             self.drone_assigned_points[drone_id] = assigned_cluster # Save the list of points into the final list
+
+        #if self.fairness < 0.5:
+        #    for i in range(len(self.drone_assigned_points)):
+        #        new_cluster = self.remove_outliers(self.drone_assigned_points[i], i)
+        #        self.drone_assigned_points[i] = new_cluster
+
 
         #Sort the points in each cluster based on the initial threshold
         for drone_id in range(self.no_drones):
@@ -332,7 +349,7 @@ class TaskAssigner(Node):
         return target_drone_list
 
 
-    def remove_outliers(self, cluster:list):
+    def remove_outliers(self, cluster:list, drone_id:int):
         distances_avg = [0 for _ in range(len(cluster))]
         for i in range(len(cluster)):
             for j in range(len(cluster)):
@@ -345,10 +362,12 @@ class TaskAssigner(Node):
             # calculate the standard deviation of distances_avg list
         
         dev_std = statistics.stdev(distances_avg)
+        self.drone_outliers = [[] for _ in range(self.no_drones)]
         for i in range(len(cluster.copy())):
-            
+
             z_score = (distances_avg[i] - np.mean(distances_avg)) / dev_std
             if z_score >= 1:
+                self.drone_outliers[drone_id].append(cluster[i])
                 cluster.pop(i)
 
         return cluster

@@ -8,10 +8,10 @@ no_drones:2
 simulation_time:300
 
 # specifies targets positions
-target_positions:(0,0,30);(10,10,5);(10,9,6);(9,8,5);(-10,-8,7);(-9,-10,8);(-10,-10,6)
+target_positions:(0,0,30);(10,10,5);(10,9,6);(9,8,5);(-10,-8,7);(-9,-10,8);(-10,-10,6);(10,0,30)
 
 # specifies threshold values for every target
-threshold_values:20,25,25,25,30,30,30
+threshold_values:20,25,25,25,30,30,30,30
 
 # specifies aoi weight
 aoi_weight:0.5
