@@ -170,7 +170,7 @@ class TaskAssigner(Node):
         
         def unfair_patrolling2():
 
-            while self.drone_assigned_points is None or self.no_drones == 0:
+            while self.drone_assigned_points is None:
                 continue
 
             last_target = [0 for _ in range(self.no_drones)]
