@@ -122,7 +122,7 @@ class DroneController(Node):
         self.cmd_vel_topic.publish(stop_mov)
 
     # Edited the eps
-    def rotate_to_target(self, target : Point, eps = 0.5):
+    def rotate_to_target(self, target : Point, eps = 0.35):
 
         target = (target.x, target.y, target.z)
 
