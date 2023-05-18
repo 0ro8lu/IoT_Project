@@ -168,41 +168,28 @@ class TaskAssigner(Node):
          - verificare che ogni drone vada in un punto diverso
         '''
         
-        def unfair_patrolling2():
+        def unfair_patrolling():
 
             while self.drone_assigned_points is None:
                 continue
 
-            last_target = [0 for _ in range(self.no_drones)]
-            for drone_id in range(self.no_drones):
-                Thread(target=self.submit_task, args=(drone_id, [self.drone_assigned_points[drone_id][0]])).start()
+            last_visit= [None for _ in range(self.no_drones)]
+            print(self.drone_assigned_points)
 
             while True:
                 for drone_id in range(self.no_drones):
                     if self.idle[drone_id]:
-                        
-                        distances = self.normalize(self.get_distances_from_drone(drone_id))
-                        thresholds = []
-                        for i in range(len(self.current_thresholds)):
-                            if self.targets[i] in self.drone_assigned_points[drone_id]:
-                                thresholds.append(self.current_thresholds[i])
-                        
 
-                        thresholds = self.normalize(thresholds)
+                        scores = self.get_scores(drone_id, last_visit[drone_id])
 
-                        scores = [0 for _ in range(len(self.drone_assigned_points[drone_id]))]
+                        if drone_id == 1:
+                            print("DRONE {} \n\nSCORES {}".format(drone_id, scores))
 
-                        for i in range(len(self.drone_assigned_points[drone_id])):
-                            if last_target[drone_id] is not None and last_target[drone_id] == i:
-                                scores[i] = 3
-                            else:
-                                scores[i] = distances[i] + thresholds[i]
-
-                        min_score = min(scores)
-                        target_index = scores.index(min_score)
+                        max_score = max(scores)
+                        target_index = scores.index(max_score)
                         target = self.drone_assigned_points[drone_id][target_index]
 
-                        last_target[drone_id] = target_index
+                        last_visit[drone_id] = target_index
 
                         Thread(target=self.submit_task, args=(drone_id, [target])).start()
                 
@@ -212,7 +199,7 @@ class TaskAssigner(Node):
         if self.fairness is not None and self.fairness >= 0.5:
             Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
         else:
-            Thread(target=unfair_patrolling2).start() # Use unfair patrolling algorithm
+            Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
 
     
 
@@ -353,7 +340,7 @@ class TaskAssigner(Node):
 
         return target_drone_list
 
-            
+
     def get_distances_from_drone(self, drone_id):
         
         distances = []
@@ -368,7 +355,7 @@ class TaskAssigner(Node):
         x2, y2, z2 = point2.x, point2.y, point2.z
         return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
-    # Uses min-max algorithm to normalize a list of values.
+
     def normalize(self, values: list):
         min_value = min(values)
         max_value = max(values)
@@ -376,8 +363,29 @@ class TaskAssigner(Node):
         if range_value == 0:
             return values
 
-        normalized_values = [(2 * ((value - min_value) / range_value)) - 1 for value in values]
+        normalized_values = [(value - min_value) / range_value for value in values]
         return normalized_values
+    
+
+    def get_scores(self, drone_id, last_visit):
+        
+        thresholds = []
+        for i in range(len(self.current_thresholds)):
+            if self.targets[i] in self.drone_assigned_points[drone_id]:
+                thresholds.append(self.current_thresholds[i])
+                        
+        norm_thresholds = self.normalize(thresholds)
+        norm_distances = self.normalize(self.get_distances_from_drone(drone_id))
+
+        scores = [0 for _ in range(len(self.drone_assigned_points[drone_id]))]
+
+        for i in range(len(self.drone_assigned_points[drone_id])):
+            if last_visit is not None and last_visit == i:
+                scores[i] = -100
+            else:
+                scores[i] = 1 - norm_thresholds[i] - norm_distances[i]
+
+        return scores
 
     # Callback function used to obtain the drone real time position, each element in the list is a list [position, orientation]
     def odometry_callback(self, msg:Odometry, drone_id):

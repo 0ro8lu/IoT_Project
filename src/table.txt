@@ -1,0 +1,15 @@
+fair alta, violation alta = fair patrolling classico
+
+fair bassa, violation alta = unfair patrolling piu' peso threshold
+
+fair alta, violation bassa = unfair patrolling classico o fair patrolling standard
+
+fair bassa, violation bassa = unfair patrolling piu' peso distanza 
+
+
+threshold si abbassa --> score si alza
+distanza si abbassa --> score si alza 
+
+################ Score_i = w_t * T_i - w_d * D_i ###############
+
+score = 1 - threshold - distanza 
