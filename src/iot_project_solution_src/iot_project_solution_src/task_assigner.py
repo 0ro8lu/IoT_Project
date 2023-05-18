@@ -181,9 +181,6 @@ class TaskAssigner(Node):
 
                         scores = self.get_scores(drone_id, last_visit[drone_id])
 
-                        if drone_id == 1:
-                            print("DRONE {} \n\nSCORES {}".format(drone_id, scores))
-
                         max_score = max(scores)
                         target_index = scores.index(max_score)
                         target = self.drone_assigned_points[drone_id][target_index]
@@ -382,7 +379,7 @@ class TaskAssigner(Node):
             if last_visit is not None and last_visit == i:
                 scores[i] = -100
             else:
-                scores[i] = 1 - ((1 - self.violation / 10) * norm_thresholds[i]) - norm_distances[i]
+                scores[i] = 1 - ((1 - self.violation / 20) * norm_thresholds[i]) - norm_distances[i]
 
         return scores
 
