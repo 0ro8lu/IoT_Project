@@ -174,7 +174,6 @@ class TaskAssigner(Node):
                 continue
 
             last_visit= [None for _ in range(self.no_drones)]
-            print(self.drone_assigned_points)
 
             while True:
                 for drone_id in range(self.no_drones):
@@ -383,7 +382,7 @@ class TaskAssigner(Node):
             if last_visit is not None and last_visit == i:
                 scores[i] = -100
             else:
-                scores[i] = 1 - norm_thresholds[i] - norm_distances[i]
+                scores[i] = 1 - ((1 - self.violation / 10) * norm_thresholds[i]) - norm_distances[i]
 
         return scores
 
