@@ -262,6 +262,8 @@ class TaskAssigner(Node):
         for target in self.targets: # Create a matrix that can be used by K-means
             points.append([target.x, target.y, target.z])
 
+        points = [self.dilate_point(p, self.wind_vector) for p in points]
+
         n_clusters = self.no_drones # The number of clusters will be equal to the number of drones
 
         kmeans = KMeans(n_clusters=n_clusters) # Creating the KMeans object with specified number of clusters
@@ -269,7 +271,7 @@ class TaskAssigner(Node):
         tmp_list = [[] for _ in enumerate(kmeans.labels_)] # Making an empty list for points given to every cluster.
 
         for i, label in enumerate(kmeans.labels_): # Assigning every point to the corresponding cluster
-            tmp_list[label].append(Point(x=points[i][0], y=points[i][1], z=points[i][2]))
+            tmp_list[label].append(Point(x=points[i][0]-self.wind_vector.x, y=points[i][1]-self.wind_vector.y, z=points[i][2]-self.wind_vector.z))
 
         centroids = [Point(x=center[0], y=center[1], z=center[2]) for center in kmeans.cluster_centers_] # Obtain the centroid lists
         
@@ -370,6 +372,11 @@ class TaskAssigner(Node):
                 scores[i] = 1 - ((1 + self.violation / 20) * norm_thresholds[i]) - norm_distances[i]
 
         return scores
+
+
+    def dilate_point(self, point, wind_vector):
+        dilated_point = [point[0] + wind_vector.x, point[1] + wind_vector.y, point[2] + wind_vector.z]
+        return dilated_point
 
     # Callback function used to obtain the drone real time position, each element in the list is a list [position, orientation]
     def odometry_callback(self, msg:Odometry, drone_id):
