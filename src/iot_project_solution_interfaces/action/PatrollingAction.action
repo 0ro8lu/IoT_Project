@@ -1,4 +1,5 @@
 geometry_msgs/Point[] targets
+geometry_msgs/Vector3   wind_vector
 ---
 string success
 ---

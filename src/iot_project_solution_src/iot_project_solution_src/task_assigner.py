@@ -41,14 +41,10 @@ class TaskAssigner(Node):
         self.drone_assigned_points = None
         self.current_thresholds = []
         self.drone_positions = None
-        self.drone_first_assignment = None
         self.aoi = None
         self.fairness = None
         self.violation = None
-        self.drone_outliers = None
-
-        self.visiting_target = None
-
+        self.wind_vector = None
         self.sim_time = 0
 
         self.task_announcer = self.create_client(
@@ -99,12 +95,12 @@ class TaskAssigner(Node):
         self.aoi = task.aoi_weight
         self.fairness = task.fairness_weight
         self.violation = task.violation_weight
+        self.wind_vector = task.wind_vector
 
         self.current_tasks = [None]*self.no_drones
         self.idle = [True] * self.no_drones
 
         self.drone_positions = [[] for _ in range(self.no_drones)]
-        self.drone_first_assignment = [False for _ in range(self.no_drones)]
 
 
         # Now create a client for the action server of each drone
@@ -158,15 +154,6 @@ class TaskAssigner(Node):
 
                 time.sleep(0.1)
 
-        '''
-        per ogni drone, calcolare uno score per ogni punto dello spazio:
-         - normalizzare distanze-thresholds (-1,1)
-           - -1 threshold più basso
-           - -1 distanza più bassa
-         - sommare i valori normalizzati
-         - ordinare le somme in modo crescente
-         - verificare che ogni drone vada in un punto diverso
-        '''
         
         def unfair_patrolling():
 
@@ -192,7 +179,7 @@ class TaskAssigner(Node):
                 time.sleep(0.1)
 
 
-        if self.fairness is not None and self.fairness >= 0.5:
+        if self.fairness is not None and self.fairness >= 0.6:
             Thread(target=fair_patrolling).start() # Use fair patrolling algorithm
         else:
             Thread(target=unfair_patrolling).start() # Use unfair patrolling algorithm
@@ -227,6 +214,7 @@ class TaskAssigner(Node):
 
         patrol_task =  PatrollingAction.Goal()
         patrol_task.targets = targets_to_patrol
+        patrol_task.wind_vector = self.wind_vector
 
         patrol_future = self.action_servers[drone_id].send_goal_async(patrol_task)
 
@@ -379,7 +367,7 @@ class TaskAssigner(Node):
             if last_visit is not None and last_visit == i:
                 scores[i] = -100
             else:
-                scores[i] = 1 - ((1 - self.violation / 20) * norm_thresholds[i]) - norm_distances[i]
+                scores[i] = 1 - ((1 + self.violation / 20) * norm_thresholds[i]) - norm_distances[i]
 
         return scores
 
@@ -395,7 +383,7 @@ class TaskAssigner(Node):
 
 def main():
 
-    time.sleep(3.0)
+    #time.sleep(3.0)
     
     rclpy.init()
 

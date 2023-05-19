@@ -14,6 +14,8 @@ from iot_project_solution_src.math_utils import *
 
 from tf_transformations import euler_from_quaternion
 
+import numpy as np
+
 # This variable is used for the drone to stay away from the ground
 # Now that our movement also makes the drone fly up if necessary, the
 # fly_to_altitude function should only be used to compensate if the drone is
@@ -67,6 +69,7 @@ class DroneController(Node):
 
         command_goal : PatrollingAction.Goal = msg.request
         targets = command_goal.targets
+        wind_vector = command_goal.wind_vector
 
         # move to altitude
         self.fly_to_altitude()
@@ -77,9 +80,9 @@ class DroneController(Node):
             count += 1
 
             # rotate to target
-            self.rotate_to_target(target)
+            # self.rotate_to_target(target, wind_vector)
             # move to target
-            self.move_to_target(target)
+            self.custom_move_to_target(target, wind_vector)
             # send feedback for the target reached
             self.report_target_reached(msg, count)
 
@@ -122,7 +125,7 @@ class DroneController(Node):
         self.cmd_vel_topic.publish(stop_mov)
 
     # Edited the eps
-    def rotate_to_target(self, target : Point, eps = 0.35):
+    def rotate_to_target(self, target : Point, wind_vector : Vector3, eps = 0.35):
 
         target = (target.x, target.y, target.z)
 
@@ -162,6 +165,38 @@ class DroneController(Node):
         stop_msg.angular = Vector3(x=0.0, y=0.0, z=0.0)
         self.cmd_vel_topic.publish(stop_msg)
 
+
+    def custom_move_to_target(self, target: Point, wind_vector : Vector3, eps=0.5, angle_eps = 0.05):
+
+        current_position = (self.position.x, self.position.y, self.position.z)
+        objective_point = (target.x, target.y, target.z)
+
+        while point_distance(current_position, objective_point) > eps:
+
+            current_position = (self.position.x, self.position.y, self.position.z)
+            direction_vector = [objective_point[0] - current_position[0], objective_point[1] - current_position[1], objective_point[2] - current_position[2]]
+
+            direction_vector[0] -= (wind_vector.x / 8)
+            direction_vector[1] -= (wind_vector.y / 8)
+            direction_vector[2] -= (wind_vector.z / 8)
+
+            mov = Twist()
+            mov.angular = Vector3(x=0.0, y=0.0, z=0.0)
+            mov.linear = Vector3(x=direction_vector[0], y=direction_vector[1], z=direction_vector[2])
+
+            angle = math.pi/2
+            current_angle = self.yaw
+
+            if not (angle-angle_eps < current_angle < angle+angle_eps):
+                angle_diff = (current_angle-angle)
+                mov.angular = Vector3(x=0.0, y=0.0, z=math.sin(angle_diff)) # Edited the angular velocity
+
+            self.cmd_vel_topic.publish(mov)
+
+        stop_msg = Twist()
+        stop_msg.linear = Vector3(x=-wind_vector.x/8, y=-wind_vector.y/8, z=-wind_vector.z/8)
+        stop_msg.angular = Vector3(x=0.0, y=0.0, z=0.0)
+        self.cmd_vel_topic.publish(stop_msg)
 
     def move_to_target(self, target : Point, eps = 0.5, angle_eps = 0.05):
 
@@ -206,6 +241,16 @@ class DroneController(Node):
         #self.get_logger().info("Target %d reached. Sending feedback." % target_count)
         feedback.progress = "Target %d reached" % target_count
         goal_handle.publish_feedback(feedback)
+
+
+    def direction_with_wind(self, wind_component, direction_component):
+        if wind_component != 0:
+            if (wind_component / abs(wind_component)) == (direction_component / abs(direction_component)):
+                direction_component += wind_component
+            else:
+                direction_component -= wind_component
+        
+        return direction_component
 
 
 def main():
