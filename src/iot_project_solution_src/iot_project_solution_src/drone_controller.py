@@ -176,9 +176,13 @@ class DroneController(Node):
             current_position = (self.position.x, self.position.y, self.position.z)
             direction_vector = [objective_point[0] - current_position[0], objective_point[1] - current_position[1], objective_point[2] - current_position[2]]
 
-            direction_vector[0] -= (wind_vector.x / 8)
-            direction_vector[1] -= (wind_vector.y / 8)
-            direction_vector[2] -= (wind_vector.z / 8)
+            direction_vector[0] -= (wind_vector.x) / 11.25
+            direction_vector[1] -= (wind_vector.y) / 11.25
+            direction_vector[2] -= (wind_vector.z) / 11.25
+
+            for i in range(3):
+                if direction_vector[i] > 2.0:
+                    direction_vector[i] = 100.0 * (direction_vector[i]/abs(direction_vector[i]))
 
             mov = Twist()
             mov.angular = Vector3(x=0.0, y=0.0, z=0.0)
@@ -194,7 +198,7 @@ class DroneController(Node):
             self.cmd_vel_topic.publish(mov)
 
         stop_msg = Twist()
-        stop_msg.linear = Vector3(x=-wind_vector.x/8, y=-wind_vector.y/8, z=-wind_vector.z/8)
+        stop_msg.linear = Vector3(x=-wind_vector.x/11.25, y=-wind_vector.y/11.25, z=-wind_vector.z/11.25)
         stop_msg.angular = Vector3(x=0.0, y=0.0, z=0.0)
         self.cmd_vel_topic.publish(stop_msg)
 
@@ -241,16 +245,7 @@ class DroneController(Node):
         #self.get_logger().info("Target %d reached. Sending feedback." % target_count)
         feedback.progress = "Target %d reached" % target_count
         goal_handle.publish_feedback(feedback)
-
-
-    def direction_with_wind(self, wind_component, direction_component):
-        if wind_component != 0:
-            if (wind_component / abs(wind_component)) == (direction_component / abs(direction_component)):
-                direction_component += wind_component
-            else:
-                direction_component -= wind_component
         
-        return direction_component
 
 
 def main():

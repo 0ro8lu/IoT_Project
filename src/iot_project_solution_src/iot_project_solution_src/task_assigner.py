@@ -390,7 +390,7 @@ class TaskAssigner(Node):
 
 def main():
 
-    #time.sleep(3.0)
+    time.sleep(1.0)
     
     rclpy.init()
 
@@ -399,7 +399,9 @@ def main():
     executor.add_node(task_assigner)
 
     task_assigner.get_task_and_subscribe_to_drones()
+    print("TASK ASSIGNER")
     task_assigner.keep_patrolling()
+    print("KEEP PATROLLING")
 
     executor.spin()
 

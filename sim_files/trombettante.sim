@@ -1,26 +1,26 @@
 # simulation name can be defined like this
-simulation_name:Face the Wind!
+simulation_name:Trombettista!
 
 # specifies the number of drones in the simulation
-no_drones:4
+no_drones:5
 
 # specifies simulation time in seconds
 simulation_time:300
 
 # specifies targets positions
-target_positions:(-5,-5,3);(-5,-4,3);(-4,-4,3);(-4,-5,3);(3,2,6);(-3,2,6);(-3,-2,6);(3,-2,6);(5,5,3);(5,3,3);(3,3,3);(3,5,3)
+target_positions:(-11,-3,5);(-9,-2,3);(-5,-9,10);(-1,-6,7);(3,5,6);(-5,1,10);(-2,-1,1);(2,-5,5);(10,10,10);(5,3,3);(3,3,3);(-3,7,1);(-5,-6,3);(-1,-2,3);(-5,-8,3);(-1,-10,6)
 
 # specifies threshold values for every target
-threshold_values:30,30,30,30,30,30,30,30,30,30,30,30
+threshold_values:28,25,30,30,30,28,17,26,26,28,22,30,25,19,18,22
 
 # specifies aoi weight
-aoi_weight:0.8
+aoi_weight:0.5
 
 # specifies violation weight
 violation_weight:1.0
 
 # specifies the fairness' weight
-fairness_weight:0.2
+fairness_weight:0.6
 
 # specifies wind direction and strength
-wind_vector:(0,8,0)
+wind_vector:(-1,8,3)
