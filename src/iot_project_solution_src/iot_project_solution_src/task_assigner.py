@@ -144,7 +144,7 @@ class TaskAssigner(Node):
     # that value goes back to True
     def keep_patrolling(self):
 
-        #Function used to perform a fair patrolling. Each drone will loop on its cluster.
+        # Function used to perform a fair patrolling. Each drone will loop on its cluster.
         def fair_patrolling():
             while True:
                 for drone_id in range(self.no_drones):
@@ -154,27 +154,28 @@ class TaskAssigner(Node):
 
                 time.sleep(0.1)
 
-        
+        # Function used to perform an unfair patrolling. Each drone is assigned to the target with the highest scores: the scores are obtained by 
+        # the get_scores function
         def unfair_patrolling():
 
             while self.drone_assigned_points is None:
                 continue
 
-            last_visit= [None for _ in range(self.no_drones)]
+            last_visit= [None for _ in range(self.no_drones)] # Used to keep track of the last visited target for each drone
 
             while True:
-                for drone_id in range(self.no_drones):
-                    if self.idle[drone_id]:
+                for drone_id in range(self.no_drones): # For each drone
+                    if self.idle[drone_id]: # If the drone is idle
 
-                        scores = self.get_scores(drone_id, last_visit[drone_id])
+                        scores = self.get_scores(drone_id, last_visit[drone_id]) # Get the scores for each target
 
-                        max_score = max(scores)
-                        target_index = scores.index(max_score)
-                        target = self.drone_assigned_points[drone_id][target_index]
+                        max_score = max(scores) # Get the hisghest score
+                        target_index = scores.index(max_score) # Get the target index with the highest scoreq
+                        target = self.drone_assigned_points[drone_id][target_index] # The variable target is the next target to visit
 
-                        last_visit[drone_id] = target_index
+                        last_visit[drone_id] = target_index # Update the last visited target of drone_id
 
-                        Thread(target=self.submit_task, args=(drone_id, [target])).start()
+                        Thread(target=self.submit_task, args=(drone_id, [target])).start() # Submit the task to the drone
                 
                 time.sleep(0.1)
 
@@ -255,7 +256,8 @@ class TaskAssigner(Node):
 
 
 
-    # Function used to calculate the target clusters
+    # Function used to divide the targets in clusters:
+    # each drone is assigned to a cluster and will patrol only the targets in that cluster
     def define_clusters(self):
 
         points = []
@@ -326,7 +328,7 @@ class TaskAssigner(Node):
 
         return target_drone_list
 
-
+    # Function used to calculate the distances betweeen the drone "drone_id" and the targets
     def get_distances_from_drone(self, drone_id):
         
         distances = []
@@ -341,7 +343,9 @@ class TaskAssigner(Node):
         x2, y2, z2 = point2.x, point2.y, point2.z
         return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
-
+    # Function used to normalize a list of values:
+    # in particular, we want to normalize the thresholds and the distances of the targets
+    # this function will be called in the get_scores function
     def normalize(self, values: list):
         min_value = min(values)
         max_value = max(values)
@@ -352,24 +356,26 @@ class TaskAssigner(Node):
         normalized_values = [(value - min_value) / range_value for value in values]
         return normalized_values
     
-
+    # Function used to calculate the scores of the targets:
+    # for each cluster, this function calculate the score of each target in the cluster
+    # the target with the highest score will be the next target to visit
     def get_scores(self, drone_id, last_visit):
         
-        thresholds = []
+        thresholds = [] # List of the thresholds of the targets in the cluster
         for i in range(len(self.current_thresholds)):
             if self.targets[i] in self.drone_assigned_points[drone_id]:
                 thresholds.append(self.current_thresholds[i])
                         
-        norm_thresholds = self.normalize(thresholds)
-        norm_distances = self.normalize(self.get_distances_from_drone(drone_id))
+        norm_thresholds = self.normalize(thresholds) # Normalize the thresholds
+        norm_distances = self.normalize(self.get_distances_from_drone(drone_id)) # Normalize the distances
 
-        scores = [0 for _ in range(len(self.drone_assigned_points[drone_id]))]
+        scores = [0 for _ in range(len(self.drone_assigned_points[drone_id]))] # Initialize the list of scores
 
-        for i in range(len(self.drone_assigned_points[drone_id])):
-            if last_visit is not None and last_visit == i:
-                scores[i] = -100
+        for i in range(len(self.drone_assigned_points[drone_id])): # For each target in the cluster
+            if last_visit is not None and last_visit == i: # If the target is the last visited
+                scores[i] = -100 # Assign a very low score
             else:
-                scores[i] = 1 - ((1 + self.violation / 20) * norm_thresholds[i]) - norm_distances[i]
+                scores[i] = 1 - ((1 + self.violation / 20) * norm_thresholds[i]) - norm_distances[i] # Calcuate the score of the target i
 
         return scores
 

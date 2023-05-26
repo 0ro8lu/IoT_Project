@@ -168,22 +168,29 @@ class DroneController(Node):
 
     def custom_move_to_target(self, target: Point, wind_vector : Vector3, eps=0.5, angle_eps = 0.05):
 
+        # Get drone's position and the position of the target to reach
         current_position = (self.position.x, self.position.y, self.position.z)
         objective_point = (target.x, target.y, target.z)
 
+        # Loop until the distance between the drone and the objective is greater than a fixed treshold
         while point_distance(current_position, objective_point) > eps:
 
+            # Get drone's position and the direction from the drone to the objective.
             current_position = (self.position.x, self.position.y, self.position.z)
             direction_vector = [objective_point[0] - current_position[0], objective_point[1] - current_position[1], objective_point[2] - current_position[2]]
 
+            
+            # To counteract the wind we've set the direction to be equal to the wind direction over an euristic value.
             direction_vector[0] -= (wind_vector.x) / 11.25
             direction_vector[1] -= (wind_vector.y) / 11.25
             direction_vector[2] -= (wind_vector.z) / 11.25
 
+            # Limit the direction vector values
             for i in range(3):
                 if direction_vector[i] > 2.0:
                     direction_vector[i] = 100.0 * (direction_vector[i]/abs(direction_vector[i]))
 
+            # Set up all the necessary objects to move the drone in Gazebo.
             mov = Twist()
             mov.angular = Vector3(x=0.0, y=0.0, z=0.0)
             mov.linear = Vector3(x=direction_vector[0], y=direction_vector[1], z=direction_vector[2])
@@ -191,14 +198,16 @@ class DroneController(Node):
             angle = math.pi/2
             current_angle = self.yaw
 
+            # Check if the current angle is within the acceptable range
             if not (angle-angle_eps < current_angle < angle+angle_eps):
                 angle_diff = (current_angle-angle)
                 mov.angular = Vector3(x=0.0, y=0.0, z=math.sin(angle_diff)) # Edited the angular velocity
 
             self.cmd_vel_topic.publish(mov)
 
+        # Create and publish a stop message with wind compensation
         stop_msg = Twist()
-        stop_msg.linear = Vector3(x=-wind_vector.x/11.25, y=-wind_vector.y/11.25, z=-wind_vector.z/11.25)
+        stop_msg.linear = Vector3(x=-wind_vector.x/11.25, y=-wind_vector.y/11.25, z=-wind_vector.z/11.25) # It is used to avoid the movements caused by the wind
         stop_msg.angular = Vector3(x=0.0, y=0.0, z=0.0)
         self.cmd_vel_topic.publish(stop_msg)
 
